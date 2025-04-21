@@ -1,0 +1,142 @@
+---
+title: "MAT360 Final Project"
+author: "Emilsy Flores"
+date: "2025-04-16"
+output: html_document
+---
+**Introduction**
+
+For my final project, I decided to use the Grocery Inventory dataset provided from Kaggle. This data offers a comprehensive view of grocery inventory containing sales data for grocery store management. The data contains 990 observations and 18 varying types of variables, such as: Product Names, Category, Supplier Name, Warehouse Location, Status, Product ID, Supplier ID, Date Received, Last Order Date, Expiration Date, Stock Quantity, Reorder Level, Reorder Quantity, Unit Price, Sales Volume, Inventory Turnover Rate, and Percentage. It covers a full year of data from 2023 to 2024 which is very recent and the author states that the publishing goal is to assist "leveraging structured data for businesses to make data-driven decisions to enhance operational efficiency and maximize profitability." (Gibin, 2023). It is updated annually and an open access dataset.
+
+```{r}
+Grocery<- read.csv("~/Downloads/Grocery_Inventory new v1.csv")
+library(ggplot2)
+library(qqplotr)
+library(pastecs)
+library(multcomp)
+library(lsr)
+```
+
+**Data Cleaning**
+
+Before moving forward, the data was cleaned using AI assistance to remove characters within any of the chosen variables, such as dollar signs and commas. In this case, only one variable, Unit Price, needed cleaning. After doing so, the variable was turned numeric because it was being classified as a character. Additionally, the column name "Catagory" was misspelled so it was correct to say "Category". Lastly a check for any NAs was conducted which resulted in zero.
+
+```{r}
+#Data Cleaning:Removes dollar signs and commas, then converts to numeric
+Grocery$Unit_Price <- gsub("[$,]", "", Grocery$Unit_Price)
+Grocery$Unit_Price <- as.numeric(Grocery$Unit_Price)
+str(Grocery$Unit_Price) #Should say numeric
+names(Grocery)[names(Grocery) == "Catagory"] <- "Category"
+#names(Grocery)
+sum(is.na(Grocery$Unit_Price))#how many NA's
+```
+
+**Model Description**
+
+For this case study, I wanted to conduct research to determine how product category and availability status impacts inventory turnover rate, while accounting for the effect of item price. For this I focused on the variables: Category ( first IV ) which is categorical and contains the following levels (Bakery, Beverages, Dairy, Fruits & Vegetables, Grains & Pulses, Oils & Fats, and Seafood), Status( second IV ) which is also categorical with levels (Active, Backordered, and Discontinued), Inventory Turnover Rate( DV ) numeric, and Unit Price( Covariate ) also numeric.
+
+This Analysis of Covariance is intended to assist business stakeholder like grocery managers or inventory analysts to find which types of products and status move faster or slower, whether more expensive products are turning over faster or slower, and how these findings can inform stocking and product status decisions.
+
+**Results**
+
+The model resulted in Unit Price having a (P-value = 0.3910) which is non-significant and suggests price doesn't seem to predict Turnover Rate much on its own, Category with a (P-value = 0.2049) which is also non-significant, however, Status with a (P-value = 0.0743) indicating near significance just over the .05 level which could suggest product availability status likely impacts turnover rate. 
+```{r}
+#ANCOVA Model:
+final_model <- aov(Inventory_Turnover_Rate ~ Unit_Price + Category + Status, data = Grocery)
+# View summary of the ANCOVA:
+summary(final_model)
+```
+
+**R-Squared**
+
+Then a detailed model summary was conducted for R-squared (0.01578) indicating that the model explains 1.6% of the variance in Inventory Turnover Rate and adjusted R-squared (0.005724) also being very low. In addition, the F-statistic results in a (P-value = 0.1106) which indicates the model is not statistically significant. Therefore, the model isn't strongly predictive, however, discontinued status is significant at the .05 level suggesting discontinued items tend to have lower turnover rates compared to the other levels. Unit price while not significant was just over .05 so price might negatively relate to turnover rate. Lastly, none of the category levels were significant.
+```{r}
+# Detailed model summary for R-squared:
+summary.lm(final_model)
+```
+
+**Effect Size**
+
+For effect sizes, all the predictive variables resulted in small effects based on partial eta squared: Unit Price(0.0029), Category(0.0098), and Status(0.0053). However, Category had the largest effect size even though it was not statistically significant. On the other hand, Status, with a smaller effect size, was the only predictor that resulted in statistical significance.
+```{r}
+# Effect size (partial eta squared):
+etaSquared(final_model)
+```
+
+**Post-Hoc Testig**
+
+Post Hoc testing was only conducted for Status because it was the only significant independent variable and contained more than two levels. Therefore, the Tukey test results suggested that while discontinued products had a lower average inventory turnover rate than active or backordered items, none of the group differences in Status reached statistical significance at the p < 0.05 level.  
+```{r}
+#Post-hoc testing:
+TukeyHSD(final_model, which = "Status")
+```
+
+**Assumption 1: Independence Between Covariate and Independent Variables**
+
+It is important that the covariate is not significantly related to the independent variables. With this in mind, an ANOVA was conducted to test the relationship between Unit Price and both Category and Status. The results showed that Unit Price was significantly related with Category (p < .001), but not significantly related to Status (p = .342). Since ANCOVA can still be valid when only one independent variable is significantly related to the covariate, this assumption can be considered met.
+
+```{r}
+#Assumption 1: Check if Covariate is independent of the Independent Variables:
+assump_model <- aov(Unit_Price ~ Category, data = Grocery) #P= 0.0000000000000002 sig relationship
+summary(assump_model)
+assump_model <- aov(Unit_Price ~ Status, data = Grocery) #P= 0.342 not sig relationship
+summary(assump_model) 
+```
+**Assumption 2: Homogeneity of Regression Slopes**
+
+For the homogeneity or regression slopes assumption, it is required that the relationship between the covariate and the dependent variable is consistent across all levels of the independent variables. Therefore a model was conducted to test this. The results indicated that the interaction was not significant, suggesting the assumption of homogeneity of regression slopes is met. A plots of Inventory Turnover Rate versus Unit Price by Catagory or Status also showed approximately parallel trend lines. Meaning the covariate can be used. 
+```{r}
+#Assumption 2: check wether relationship between covariate and Dependent Variable is the same
+aov(Inventory_Turnover_Rate ~ Unit_Price * Status + Category, data = Grocery)
+ggplot(Grocery, aes(x=Inventory_Turnover_Rate, y=Unit_Price, color=Category))+
+  geom_point()+
+  geom_smooth(method = "lm", fill=NA) #puts in a regression line
+
+ggplot(Grocery, aes(x=Inventory_Turnover_Rate, y=Unit_Price, color=Status))+
+  geom_point()+
+  geom_smooth(method = "lm", fill=NA) #puts in a regression line
+```
+**Assumption 3: Normality of Residuals**
+
+Residuals from the ANCOVA model were tested for normality using a plot that showed some deviation from the diagonal line in an almost S-curve shape, this indicates slight skewness. Additionally normality statistics were checked resulting in significant results (p < .001). This suggests a deviation from normality. However, given the large sample size (n = 990), ANCOVA is considered robust to mild departure from normality so this assumption can be considered met as well.
+
+```{r}
+#Assumption 3: Check normality of residuals
+Grocery$resid <- resid(final_model)
+ggplot(Grocery, aes(sample = resid)) +
+  stat_qq_point() +
+  stat_qq_line() +
+  stat_qq_band()
+# Check normality stats
+stat.desc(Grocery$resid, norm = TRUE)#P=.0000000000000015
+```
+
+**Descriptive Statistics**
+
+Descriptive statistics were calculated for Inventory Turnover Rate by Category and Status. Across product categories, the average turnover rate was 45.22 (SD = 29.70) for Oils & Fats and 53.73 (SD = 28.34) for Seafood. The other categories had similar means, including Bakery (M = 50.53, SD = 29.29), Beverages (M = 51.31, SD = 28.84), Dairy (M = 53.43, SD = 28.83), Fruits & Vegetables (M = 49.42, SD = 28.54), and Grains & Pulses (M = 47.75, SD = 28.80). This shows that there was not a lot of variation in the turnover rates by product category.
+
+For Status, Discontinued products had the lowest average turnover rate (M = 47.24, SD = 28.81). This was compared to Active products (M = 51.82, SD = 28.92) and Backordered products (M = 51.43, SD = 28.52). This matched what was found from the model, where discontinued items were significantly related to lower turnover.
+
+```{r}
+#Descriptive stats of Dependent Variable by levels of Independent Variables:
+by(Grocery$Inventory_Turnover_Rate, Grocery$Category, stat.desc)
+by(Grocery$Inventory_Turnover_Rate, Grocery$Status, stat.desc)
+```
+
+**Discussion & Limitations**
+
+The result of the ANCOVA model showed that Status was the only independent variable that was significantly associated with Inventory Turnover Rate after controlling for Unit Price. In particular, the discontinued products had much lower turnover compared to active and backordered products. This suggests that product status may be important when it comes to sales performance.
+
+Category did not prove to be a significant predictor of turnover rates, but descriptive statistics showed slight differences in turnover rates among different product types. Unit Price as the covariate also did not significantly relate to turnover rate in the model, but its results suggest that more expensive items can take longer to sell.
+
+Some limitations are that effect sizes were small for all the predictors used, with partial eta squared less than .01. This shows that the variables in the model accounted for very little of the variation in the turnover rate. This was also clear from the low R-squared value, which showed that there may be other factors not included in the model that may be better predictors. In addition, the assumption of normality of residuals was not entirely met, but this likely did not impact the results since the sample size was large. Finally, the dataset may lack significant context, like product demand patterns that may also impact inventory turnover.
+
+**Conclusion & Recommendations**
+
+In conclusion, the research question wanted to answer whether product Status and Category were related to Inventory Turnover Rate, while controlling for Unit Price. The results only partially supported the question. This is because only the variable Status showed a statistically significant relationship with Turnover. Discontinued products turned over more slowly, which is important for the stakeholders (inventory managers) making decisions about products (like which to assign for clearance).
+
+Based on these results, stakeholders should manage the performance of discontinued products more closely and consider strategies like perhaps giving discounts or removing them earlier from shelves, to improve turnover. Although pricing and category were not significant predictors in this model, they may still matter in other specific contexts.
+
+**Citations**
+
+Gibin, Willian Oliveira. *Grocery Inventory Dataset*. Kaggle, 2023, https://www.kaggle.com/datasets/willianoliveiragibin/grocery-inventory.  
